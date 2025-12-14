@@ -77,7 +77,7 @@ Maecenas ex diam, vehicula et nulla vel, mattis viverra metus. Nam at ex sceleri
 
 ## VT Üzerinde Gösterilen Kaynak Kodları
 
-Açıklama [Linki](https://...) 
-Açıklama [Linki](https://...) 
-Açıklama [Linki](https://...)
-.....
+Açıklama [Linki](https://...) \
+Açıklama [Linki](https://...) \
+Açıklama [Linki](https://...) \
+... \
