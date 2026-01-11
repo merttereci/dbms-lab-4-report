@@ -56,29 +56,62 @@ DB diske yazarken:
 
 ---
 
-# Video [Linki](https://www.youtube.com/watch?v=Nw1OvCtKPII&t=2635s) 
-Ekran kaydı. 2-3 dk. açık kaynak V.T. kodu üzerinde konunun gösterimi. Video kendini tanıtma ile başlamalıdır (Numara, İsim, Soyisim, Teknik İlgi Alanları). 
+# Video [Linki](https://youtu.be/x1EhczEopQE) 
+(23060173, MERT, TERECİ, Makine Öğrenmesi, CNN tabanlı görüntü işleme). 
 
 ---
 
 # Açıklama (Ort. 600 kelime)
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse lacinia luctus urna, vel aliquet lacus facilisis ac. Donec quis placerat orci, efficitur consectetur lacus. Sed rhoncus erat ex, at sagittis velit mollis et. Aliquam enim orci, sollicitudin sit amet libero quis, mollis ultricies risus. Fusce tempor, felis a consequat tristique, dolor magna convallis nulla, vel ullamcorper magna mauris non ipsum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam quis imperdiet ex, at blandit sapien. Aliquam lacinia erat ac ipsum fringilla, quis vestibulum augue posuere. Nulla in enim nulla. Nunc euismod odio mauris, sed sollicitudin ex condimentum non. In efficitur egestas enim. Fusce tempus erat quis placerat convallis.
+# Buffer Pool ve LRU Algoritması: MySQL/InnoDB Kaynak Kod Analizi
 
-Nam sit amet tincidunt ante. Pellentesque sit amet quam interdum, pellentesque dui vel, iaculis elit. Donec sed dui sodales nulla dignissim tincidunt. Maecenas semper metus id fermentum vulputate. Pellentesque lobortis hendrerit venenatis. Nullam imperdiet, ex eget ultricies egestas, mauris nunc aliquam ante, sed consectetur tellus ex vel leo. Nunc ut erat dapibus, auctor dolor eu, pretium sem. In lacinia congue eros et finibus. Aenean auctor, leo a feugiat placerat, urna felis lacinia purus, laoreet volutpat mi nisl eget dui. Ut vitae condimentum leo.
+## Giriş
 
-Maecenas ex diam, vehicula et nulla vel, mattis viverra metus. Nam at ex scelerisque, semper augue lobortis, semper est. Etiam id pretium odio, eget rutrum neque. Pellentesque blandit magna vel aliquam gravida. Nullam massa nisl, imperdiet at dapibus non, cursus vehicula turpis. Vestibulum rutrum hendrerit augue. Aliquam id nisi id arcu tempor venenatis vel nec erat. Morbi sed posuere erat. Morbi et sollicitudin urna. Suspendisse ullamcorper vitae purus sit amet sodales. Nam ut tincidunt ipsum, ut varius erat. Duis congue magna nec euismod condimentum. In hac habitasse platea dictumst. Nunc mattis odio sed enim laoreet imperdiet. In hac habitasse platea dictumst. Nullam tincidunt quis.
+Veritabanı sistemlerinin performansı büyük ölçüde disk ile bellek arasındaki veri transferinin ne kadar verimli yönetildiğine bağlıdır. Disk erişimi, RAM erişimine kıyasla yaklaşık 100.000 kat daha yavaştır. Bu hız farkı, modern veritabanı yönetim sistemlerinin en kritik optimizasyon noktalarından birini oluşturur. MySQL'in InnoDB depolama motoru, bu sorunu Buffer Pool adı verilen bir bellek önbellekleme mekanizması ile çözer.
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse lacinia luctus urna, vel aliquet lacus facilisis ac. Donec quis placerat orci, efficitur consectetur lacus. Sed rhoncus erat ex, at sagittis velit mollis et. Aliquam enim orci, sollicitudin sit amet libero quis, mollis ultricies risus. Fusce tempor, felis a consequat tristique, dolor magna convallis nulla, vel ullamcorper magna mauris non ipsum. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Nam quis imperdiet ex, at blandit sapien. Aliquam lacinia erat ac ipsum fringilla, quis vestibulum augue posuere. Nulla in enim nulla. Nunc euismod odio mauris, sed sollicitudin ex condimentum non. In efficitur egestas enim. Fusce tempus erat quis placerat convallis.
+## Buffer Pool Nedir?
 
-Nam sit amet tincidunt ante. Pellentesque sit amet quam interdum, pellentesque dui vel, iaculis elit. Donec sed dui sodales nulla dignissim tincidunt. Maecenas semper metus id fermentum vulputate. Pellentesque lobortis hendrerit venenatis. Nullam imperdiet, ex eget ultricies egestas, mauris nunc aliquam ante, sed consectetur tellus ex vel leo. Nunc ut erat dapibus, auctor dolor eu, pretium sem. In lacinia congue eros et finibus. Aenean auctor, leo a feugiat placerat, urna felis lacinia purus, laoreet volutpat mi nisl eget dui. Ut vitae condimentum leo.
+Buffer Pool, InnoDB'nin RAM'de ayırdığı ve sık erişilen veritabanı sayfalarını önbelleğe aldığı bir alandır. Veritabanı sunucularında genellikle fiziksel belleğin %80'ine kadarı bu havuza ayrılır. Her sayfa tipik olarak 16KB boyutundadır ve birden fazla satır veya indeks girdisi içerebilir.
 
-Maecenas ex diam, vehicula et nulla vel, mattis viverra metus. Nam at ex scelerisque, semper augue lobortis, semper est. Etiam id pretium odio, eget rutrum neque. Pellentesque blandit magna vel aliquam gravida. Nullam massa nisl, imperdiet at dapibus non, cursus vehicula turpis. Vestibulum rutrum hendrerit augue. Aliquam id nisi id arcu tempor venenatis vel nec erat. Morbi sed posuere erat. Morbi et sollicitudin urna. Suspendisse ullamcorper vitae purus sit amet sodales. Nam ut tincidunt ipsum, ut varius erat. Duis congue magna nec euismod condimentum. In hac habitasse platea dictumst. Nunc mattis odio sed enim laoreet imperdiet. In hac habitasse platea dictumst. Nullam tincidunt quis.
+MySQL kaynak kodunda Buffer Pool yapısı `storage/innobase/include/buf0buf.h` dosyasında tanımlanan `buf_pool_t` struct'ı ile temsil edilir. Bu yapı içerisinde `free` listesi boş sayfaları, `LRU` listesi ise kullanımda olan sayfaları tutar. Ayrıca `page_hash` hash tablosu sayesinde istenen bir sayfa hızlıca bulunabilir.
+
+Bir SQL sorgusu çalıştırıldığında, InnoDB öncelikle ihtiyaç duyulan sayfanın Buffer Pool'da olup olmadığını kontrol eder. Sayfa bellekte mevcutsa doğrudan oradan okunur ve diskten okuma yapılmasına gerek kalmaz. Bu durum "buffer pool hit" olarak adlandırılır ve veritabanı performansını dramatik şekilde artırır.
+
+## LRU Algoritması
+
+Buffer Pool'un kapasitesi sınırlıdır. Yeni sayfalar için yer açılması gerektiğinde hangi sayfaların çıkarılacağına karar vermek kritik bir problemdir. InnoDB bu sorunu LRU (Least Recently Used - En Az Kullanılan) algoritmasının geliştirilmiş bir versiyonuyla çözer.
+
+Klasik LRU algoritması, en uzun süredir erişilmemiş sayfayı çıkarmayı önerir. Ancak InnoDB, tam tablo taraması gibi işlemlerin tüm önbelleği kirletmesini önlemek için "midpoint insertion" stratejisi kullanır. Bu stratejide LRU listesi iki alt listeye bölünür: listenin başında sık erişilen "young" (genç/sıcak) sayfalar, sonunda ise daha az erişilen "old" (eski/soğuk) sayfalar bulunur.
+
+Kaynak kodda bu yapı `buf_pool_t` struct'ındaki `LRU` listesi ve `LRU_old` pointer'ı ile yönetilir. `LRU_old_ratio` değişkeni, listenin ne kadarının eski sayfalar için ayrılacağını belirler ve varsayılan olarak listenin yaklaşık %37'si eski sayfalara ayrılır.
+
+Yeni bir sayfa Buffer Pool'a alındığında, doğrudan listenin başına değil, orta noktaya (midpoint) yani eski alt listenin başına eklenir. Sayfa tekrar erişildiğinde ve belirli bir süre geçtiyse, young alt listesine terfi ettirilir. Bu mekanizma, tek seferlik okunan sayfaların değerli önbellek alanını işgal etmesini engeller.
+
+## Performans Etkisi
+
+Buffer Pool ve LRU algoritmasının birlikte çalışması, veritabanı performansını birkaç şekilde optimize eder. İlk olarak, sık erişilen veriler bellekte tutularak disk I/O operasyonları minimize edilir. İkinci olarak, akıllı sayfa değiştirme politikası sayesinde gerçekten önemli veriler önbellekte kalırken, nadiren kullanılan veriler çıkarılır. Üçüncü olarak, midpoint insertion stratejisi büyük tarama operasyonlarının çalışma kümesini bozmasını önler.
+
+## Veri Yapıları Perspektifi
+
+Kaynak kod incelendiğinde, Buffer Pool'un temel veri yapılarının ustaca kullanıldığı görülür. LRU listesi çift yönlü bağlı liste (doubly linked list) olarak implemente edilmiştir. Bu yapı, sayfaların liste içinde O(1) zamanda taşınmasına olanak tanır. Bir sayfaya erişildiğinde, o sayfa mevcut konumundan çıkarılıp listenin başına taşınır - bu işlem pointer manipülasyonu ile sabit zamanda gerçekleştirilir.
+
+Hash tablosu (`page_hash`) ise sayfaların hızlı bulunmasını sağlar. Bir sayfa talep edildiğinde, (space_id, page_number) çifti hash fonksiyonundan geçirilir ve sayfanın bellekte olup olmadığı O(1) ortalama zamanda belirlenir. Bu kombinasyon - hash tablosu ile hızlı arama, bağlı liste ile hızlı sıralama - önbellekleme sistemlerinde yaygın kullanılan klasik bir tasarım kalıbıdır.
+
+## Sistem Programlama Perspektifi
+
+Buffer Pool yönetimi, işletim sistemi seviyesinde birçok kavramla doğrudan ilişkilidir. Mutex'ler (`LRU_list_mutex`, `free_list_mutex`) eşzamanlı erişimi kontrol eder ve veri tutarlılığını sağlar. Birden fazla thread aynı anda Buffer Pool'a erişebilir, ancak kritik bölümler kilitlerle korunur.
+
+Ayrıca Buffer Pool, işletim sisteminin sayfa önbelleğine (page cache) benzer bir mantıkla çalışır. Her ikisi de sık erişilen verileri hızlı belleğe alır ve benzer değiştirme politikaları kullanır. Ancak InnoDB kendi Buffer Pool'unu yöneterek, veritabanı iş yüklerine özel optimizasyonlar yapabilmektedir.
+
+## Sonuç
+
+Buffer Pool ve LRU algoritması, MySQL/InnoDB'nin yüksek performanslı çalışmasının temel taşlarıdır. Bu mekanizmalar, sistem programlama ve veri yapıları perspektifinden incelendiğinde, teorik bilginin pratikte nasıl uygulandığının mükemmel bir örneğini sunar. Linked list veri yapısı, hash tabloları ve önbellekleme algoritmaları gibi temel kavramlar, gerçek dünya veritabanı sistemlerinde kritik performans kazanımları sağlamak için bir araya getirilmiştir.
 
 ## VT Üzerinde Gösterilen Kaynak Kodları
 
-Açıklama [Linki](https://...) \
-Açıklama [Linki](https://...) \
-Açıklama [Linki](https://...) \
+Buffer Pool Yapısı [Linki](https://github.com/mysql/mysql-server/blob/8.0/storage/innobase/include/buf0buf.h) \
+Buffer Pool Implementasyonu: [Linki](https://github.com/mysql/mysql-server/blob/8.0/storage/innobase/buf/buf0buf.cc) \
+LRU Algoritması [Linki](https://github.com/mysql/mysql-server/blob/8.0/storage/innobase/buf/buf0lru.cc) \
+MySQL Dokümantasyonu: [Linki](https://dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool.html) \
 ... \
 ...
